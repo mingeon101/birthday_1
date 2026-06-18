@@ -1,157 +1,231 @@
-// firebase.js
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 
 import {
     getDatabase,
     ref,
     get,
-    push,
-    set
-} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
+    set,
+    push
+}
+from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
+
+/* =================================
+   Firebase 설정
+================================= */
 
 const firebaseConfig = {
-    apiKey: "AIzaSyCd7LUP_IDnbdLgIxyj6iGEFtwXbzwubjc",
-    authDomain: "database-4d830.firebaseapp.com",
-    databaseURL: "https://database-4d830-default-rtdb.firebaseio.com",
-    projectId: "database-4d830",
-    storageBucket: "database-4d830.firebasestorage.app",
-    messagingSenderId: "1011786036842",
-    appId: "1:1011786036842:web:f645d6af597e0c22b4bc13",
-    measurementId: "G-T5S9KKZ2G8"
+
+    apiKey:
+    "AIzaSyCd7LUP_IDnbdLgIxyj6iGEFtwXbzwubjc",
+
+    authDomain:
+    "database-4d830.firebaseapp.com",
+
+    databaseURL:
+    "https://database-4d830-default-rtdb.firebaseio.com",
+
+    projectId:
+    "database-4d830",
+
+    storageBucket:
+    "database-4d830.firebasestorage.app",
+
+    messagingSenderId:
+    "1011786036842",
+
+    appId:
+    "1:1011786036842:web:f645d6af597e0c22b4bc13"
 };
 
-const app = initializeApp(firebaseConfig);
+/* =================================
+   Firebase 시작
+================================= */
 
-export const db = getDatabase(app);
+const app =
+    initializeApp(
+        firebaseConfig
+    );
 
-/*
-=================================
-상품 목록 가져오기
-=================================
-*/
+export const db =
+    getDatabase(
+        app
+    );
 
-export async function loadPrizes() {
+/* =================================
+   상품 불러오기
+================================= */
 
-    try {
+export async function loadPrizes(){
 
-        const snapshot = await get(ref(db, "prizes"));
+    try{
 
-        if (!snapshot.exists()) {
+        const snapshot =
+            await get(
+                ref(
+                    db,
+                    "prizes"
+                )
+            );
+
+        if(
+            !snapshot.exists()
+        ){
             return [];
         }
 
-        const data = snapshot.val();
+        const data =
+            snapshot.val();
 
-        return Object.keys(data).map(key => ({
-            id: key,
-            ...data[key]
-        }));
+        return Object.keys(
+            data
+        ).map(
+            key => ({
+                id:key,
+                ...data[key]
+            })
+        );
 
-    } catch (e) {
+    }catch(err){
 
-        console.error("상품 불러오기 실패", e);
+        console.error(
+            err
+        );
 
         return [];
     }
 }
 
-/*
-=================================
-랜덤 상품 선택
-=================================
-*/
+/* =================================
+   랜덤 상품
+================================= */
 
-export async function getRandomPrize() {
+export async function getRandomPrize(){
 
-    const prizes = await loadPrizes();
+    const prizes =
+        await loadPrizes();
 
-    if (prizes.length === 0) {
+    const available =
+        prizes.filter(
+            p =>
+            (p.stock || 0) > 0
+        );
+
+    if(
+        available.length === 0
+    ){
         return null;
     }
 
-    const available = prizes.filter(
-        p => (p.stock || 0) > 0
-    );
+    const index =
+        Math.floor(
+            Math.random()
+            *
+            available.length
+        );
 
-    if (available.length === 0) {
-        return null;
-    }
-
-    const randomIndex =
-        Math.floor(Math.random() * available.length);
-
-    return available[randomIndex];
+    return available[
+        index
+    ];
 }
 
-/*
-=================================
-당첨 저장
-=================================
-*/
+/* =================================
+   당첨 저장
+================================= */
 
-export async function saveWin(prize) {
+export async function saveWin(
+    prize
+){
 
-    try {
+    try{
 
-        const winsRef = ref(db, "wins");
+        const winsRef =
+            ref(
+                db,
+                "wins"
+            );
 
-        const newWinRef = push(winsRef);
+        const newRef =
+            push(
+                winsRef
+            );
 
-        await set(newWinRef, {
+        await set(
+            newRef,
+            {
 
-            prizeId: prize.id,
+                prizeId:
+                    prize.id,
 
-            name: prize.name,
+                name:
+                    prize.name,
 
-            image: prize.image || "",
+                image:
+                    prize.image || "",
 
-            url: prize.url || "",
+                url:
+                    prize.url || "",
 
-            time: Date.now()
+                time:
+                    Date.now()
 
-        });
+            }
+        );
 
         return true;
 
-    } catch (e) {
+    }catch(err){
 
-        console.error("당첨 저장 실패", e);
+        console.error(
+            err
+        );
 
         return false;
     }
 }
 
-/*
-=================================
-재고 감소
-=================================
-*/
+/* =================================
+   재고 감소
+================================= */
 
-export async function decreaseStock(prize) {
+export async function decreaseStock(
+    prize
+){
 
-    try {
+    try{
 
-        const prizeRef = ref(
-            db,
-            `prizes/${prize.id}/stock`
-        );
+        const stockRef =
+            ref(
+                db,
+                `prizes/${prize.id}/stock`
+            );
 
-        const snapshot = await get(prizeRef);
+        const snapshot =
+            await get(
+                stockRef
+            );
 
-        if (!snapshot.exists()) {
+        if(
+            !snapshot.exists()
+        ){
             return;
         }
 
-        const current = snapshot.val();
+        const stock =
+            snapshot.val();
 
         await set(
-            prizeRef,
-            Math.max(0, current - 1)
+            stockRef,
+            Math.max(
+                0,
+                stock - 1
+            )
         );
 
-    } catch (e) {
+    }catch(err){
 
-        console.error(e);
+        console.error(
+            err
+        );
     }
 }
