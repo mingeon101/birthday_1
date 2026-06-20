@@ -1,79 +1,108 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>3D 캡슐 인형뽑기</title>
-
-<link rel="stylesheet" href="style.css">
-
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.170.0/build/three.module.js"
-  }
-}
-</script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>쿠폰 사용하기</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 400px; margin: 0 auto; }
+        .container { border: 1px solid #ccc; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input { width: 100%; padding: 100px; padding: 10px; box-sizing: border-box; margin-bottom: 10px; }
+        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        #message { margin-top: 15px; font-weight: bold; text-align: center; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
 </head>
-
 <body>
 
-<div id="loading">
-  로딩중...
+<div class="container">
+    <h2>🎁 쿠폰 등록 / 사용</h2>
+    <input type="text" id="couponInput" placeholder="쿠폰 코드를 입력하세요">
+    <button id="useBtn">쿠폰 사용하기</button>
+    <div id="message"></div>
 </div>
 
-<div id="game"></div>
+<script type="module">
+    // 필요한 Firebase SDK 임포트
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
+    // 데이터베이스 조작을 위한 기능 추가
+    import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-<div id="ui">
+    // 보내주신 파이어베이스 설정값
+    const firebaseConfig = {
+        apiKey: "AIzaSyCd7LUP_IDnbdLgIxyj6iGEFtwXbzwubjc",
+        authDomain: "database-4d830.firebaseapp.com",
+        databaseURL: "https://database-4d830-default-rtdb.firebaseio.com",
+        projectId: "database-4d830",
+        storageBucket: "database-4d830.firebasestorage.app",
+        messagingSenderId: "1011786036842",
+        appId: "1:1011786036842:web:f645d6af597e0c22b4bc13",
+        measurementId: "G-T5S9KKZ2G8"
+    };
 
-  <div id="coinBox">
-    코인 :
-    <span id="coin">999</span>
-  </div>
+    // Firebase 초기화
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const db = getDatabase(app); // 데이터베이스 객체 가져오기
 
-  <div id="joystick">
-    <div id="stick"></div>
-  </div>
+    // HTML 엘리먼트 연결
+    const couponInput = document.getElementById('couponInput');
+    const useBtn = document.getElementById('useBtn');
+    const messageDiv = document.getElementById('message');
 
-  <button id="dropBtn">
-    집게
-  </button>
+    // 쿠폰 사용 버튼 클릭 이벤트
+    useBtn.addEventListener('click', async () => {
+        const couponCode = couponInput.value.trim();
+        messageDiv.innerText = ""; // 메시지 초기화
 
-</div>
+        if (!couponCode) {
+            showMessage("쿠폰 코드를 입력해주세요.", "error");
+            return;
+        }
 
-<div id="resultModal">
+        try {
+            // 파이어베이스 데이터베이스의 'coupons/입력한코드' 경로를 가리킴
+            const couponRef = ref(db, `coupons/${couponCode}`);
+            const snapshot = await get(couponRef);
 
-  <div id="resultCard">
+            // 1. 쿠폰 존재 여부 확인
+            if (!snapshot.exists()) {
+                showMessage("존재하지 않는 쿠폰 번호입니다.", "error");
+                return;
+            }
 
-    <h2>🎉 당첨!</h2>
+            const couponData = snapshot.val();
 
-    <img
-      id="resultImage"
-      src=""
-      alt="상품 이미지"
-    >
+            // 2. 이미 사용된 쿠폰인지 확인
+            if (couponData.used === true) {
+                showMessage("이미 사용된 쿠폰입니다.", "error");
+                return;
+            }
 
-    <h3 id="resultName"></h3>
+            // 3. 쿠폰 사용 처리 (used 상태를 true로 업데이트)
+            await update(couponRef, {
+                used: true,
+                usedAt: new Date().toISOString() // 사용한 시간 기록
+            });
 
-    <div id="qrcode"></div>
+            showMessage(`🎉 쿠폰이 성공적으로 적용되었습니다! (${couponData.reward || '보상'})`, "success");
+            couponInput.value = ""; // 입력창 비우기
 
-    <button id="shareBtn">
-      공유하기
-    </button>
+        } catch (error) {
+            console.error(error);
+            showMessage("서버 통신 중 오류가 발생했습니다.", "error");
+        }
+    });
 
-    <button id="closeBtn">
-      닫기
-    </button>
-
-  </div>
-
-</div>
-
-<script type="module" src="./app.js"></script>
+    // 메시지 출력 함수
+    function showMessage(text, type) {
+        messageDiv.innerText = text;
+        messageDiv.className = type;
+    }
+</script>
 
 </body>
 </html>
