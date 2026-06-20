@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 인형뽑기</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&family=Noto+Sans+KR:wght@300;500;800;900&display=swap" rel="stylesheet">
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- QR Code Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f3f4f6;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .luxury-font {
+            font-family: 'Montserrat', sans-serif;
+        }
+        /* 고급 반투명 글래스모피즘 UI */
+        .glass-ui {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.05);
+        }
+        /* 캡슐 개봉 쪼개짐 애니메이션 */
+        @keyframes split-top {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-130px) rotate(-25deg); opacity: 0; }
+        }
+        @keyframes split-bottom {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(130px) rotate(25deg); opacity: 0; }
+        }
+        .capsule-top-split {
+            animation: split-top 1.1s forwards cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        .capsule-bottom-split {
+            animation: split-bottom 1.1s forwards cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        .pulse-soft {
+            animation: subtle-pulse 2s infinite;
+        }
+        @keyframes subtle-pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between items-center text-slate-800 relative bg-slate-100">
+
+    <!-- 상단 럭셔리 대시보드 HUD -->
+    <header class="w-full max-w-lg px-6 pt-5 z-20 flex justify-between items-center pointer-events-none absolute top-0">
+        <!-- 코인 상태 -->
+        <div class="glass-ui rounded-2xl px-4 py-2 flex items-center space-x-3 pointer-events-auto">
+            <div class="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center border border-amber-300">
+                <i class="fa-solid fa-coins text-amber-500 text-sm animate-bounce"></i>
+            </div>
+            <div>
+                <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider luxury-font">Credits</p>
+                <p id="coin-count" class="text-sm font-black text-slate-700 luxury-font">05</p>
+            </div>
+        </div>
+
+        <!-- 타이틀 헤더 -->
+        <div class="text-center bg-white/90 backdrop-blur-md px-5 py-2 rounded-2xl border border-white/60 shadow-sm pointer-events-auto">
+            <h1 class="text-sm font-black tracking-widest text-slate-800 uppercase luxury-font">CHAMPION CLAW</h1>
+            <p class="text-[8px] text-rose-500 font-bold tracking-widest uppercase">Interactive 3D Deck</p>
+        </div>
+
+        <!-- 획득 가챠 누적 개수 -->
+        <div class="glass-ui rounded-2xl px-4 py-2 flex items-center space-x-3 pointer-events-auto">
+            <div class="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center border border-rose-300">
+                <i class="fa-solid fa-trophy text-rose-500 text-sm"></i>
+            </div>
+            <div>
+                <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider luxury-font">Prizes</p>
+                <p id="inventory-count" class="text-sm font-black text-rose-500 luxury-font">00</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- 3D 뷰어 영역 (화면 전체 차지) -->
+    <main id="canvas-container" class="w-full h-full absolute inset-0 z-0">
+        <!-- 3D 기기 직관적 조작 가이드 안내 -->
+        <div class="absolute bottom-36 left-6 z-20 pointer-events-none max-w-xs">
+            <div class="bg-slate-900/90 text-white p-3 rounded-2xl shadow-xl flex items-start space-x-3 border border-slate-700">
+                <div class="text-rose-400 text-base mt-0.5"><i class="fa-solid fa-hand-pointer animate-ping"></i></div>
+                <div class="text-[10px] leading-relaxed text-slate-300">
+                    <span class="font-bold text-white text-xs block mb-0.5">3D 리얼 조작 모드</span>
+                    기계 전면의 <b>빨간색 레버</b>를 직접 드래그해 움직이고, <b>초록색 버튼</b>을 클릭해 뽑기를 시작하세요!
+                </div>
+            </div>
+        </div>
+
+        <!-- 우측 시점 변경 팁 -->
+        <div class="absolute bottom-36 right-6 z-20 pointer-events-none">
+            <div class="bg-white/90 backdrop-blur-md px-3 py-2 rounded-xl shadow-md border border-white text-[10px] text-slate-500 font-bold flex items-center space-x-1.5">
+                <i class="fa-solid fa-arrows-spin text-rose-500 animate-spin" style="animation-duration: 4s;"></i>
+                <span>화면 여백을 쓸어 넘기면 시점이 회전합니다!</span>
+            </div>
+        </div>
+
+        <!-- 실시간 피드백 토스트 알림 -->
+        <div id="toast-message" class="absolute top-24 left-1/2 transform -translate-x-1/2 bg-slate-900/90 text-white px-5 py-3 rounded-2xl text-xs font-bold tracking-wide shadow-2xl opacity-0 transition-all duration-300 pointer-events-none z-30 flex items-center space-x-2">
+            <i class="fa-solid fa-circle-exclamation text-rose-400"></i>
+            <span>동전을 먼저 충전하고 3D 조종관을 움직이세요!</span>
+        </div>
+    </main>
+
+    <!-- 하단 부가 기능 콘솔바 -->
+    <footer class="w-full max-w-lg px-6 pb-6 z-20 flex flex-col space-y-3 pointer-events-none absolute bottom-0">
+        <div class="flex space-x-3 pointer-events-auto">
+            <!-- 코인 충전 -->
+            <button id="btn-add-coin" class="flex-grow py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold rounded-2xl transition duration-150 flex items-center justify-center space-x-2.5 shadow-xl text-xs tracking-wider uppercase luxury-font">
+                <i class="fa-solid fa-circle-dollar-to-slot text-sm text-yellow-400 animate-bounce"></i>
+                <span>무료 동전 충전 (Add Coin)</span>
+            </button>
+            <!-- 소리 전환 -->
+            <button id="sound-toggle" class="px-5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 rounded-2xl transition shadow-md flex items-center justify-center">
+                <i class="fa-solid fa-volume-high text-sm"></i>
+            </button>
+            <!-- 도움 가이드 호출 -->
+            <button id="btn-how-to" class="px-5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 rounded-2xl transition shadow-md flex items-center justify-center">
+                <i class="fa-solid fa-circle-question text-sm"></i>
+            </button>
+        </div>
+    </footer>
+
+    <!-- 캡슐 오프닝 서스펜스 컷씬 모달 -->
+    <div id="capsule-animation-modal" class="fixed inset-0 bg-white/95 z-40 hidden flex flex-col items-center justify-center p-6">
+        <div class="text-center space-y-1 mb-12">
+            <h2 class="text-3xl font-black text-slate-800 tracking-wider luxury-font">OPENING CAPSULE</h2>
+            <p class="text-xs text-rose-500 font-bold tracking-widest uppercase">곧 당첨된 귀여운 상품이 공개됩니다!</p>
+        </div>
+
+        <!-- 3D 캡슐 쪼개지는 애니메이션 프레임 -->
+        <div id="capsule-container" class="w-64 h-64 relative flex flex-col items-center justify-center">
+            <div id="capsule-top" class="absolute w-40 h-22 bg-gradient-to-t from-rose-500 to-red-500 rounded-t-full border-t-8 border-x-8 border-slate-950 shadow-2xl flex items-end justify-center pb-2">
+                <div class="w-10 h-2 bg-white/20 rounded-full mb-1"></div>
+            </div>
+            <div id="capsule-bottom" class="absolute w-40 h-22 bg-gradient-to-b from-slate-100 to-slate-300 rounded-b-full border-b-8 border-x-8 border-slate-950 shadow-inner flex items-start justify-center pt-2 mt-40">
+                <div class="w-32 h-1.5 bg-slate-950/10 rounded-full"></div>
+            </div>
+            <div id="capsule-glow" class="absolute w-48 h-48 bg-yellow-200 rounded-full blur-3xl opacity-0 scale-50 transition-all duration-750"></div>
+        </div>
+        <p class="text-xs text-slate-400 font-bold tracking-widest mt-12 pulse-soft uppercase luxury-font">Unveiling Prize...</p>
+    </div>
+
+    <!-- 최종 경품 당첨 팝업 모달 -->
+    <div id="result-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl relative text-center border border-white">
+            <div class="absolute -top-5 left-1/2 transform -translate-x-1/2 bg-rose-500 text-white font-black text-[10px] py-1.5 px-6 rounded-full shadow-lg uppercase tracking-widest">
+                🎉 Congratulations 🎉
+            </div>
+
+            <!-- 당첨 이미지/이모지 비주얼 슬롯 -->
+            <div class="my-6 flex justify-center">
+                <div id="prize-emoji" class="text-6xl p-5 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm animate-bounce flex items-center justify-center w-32 h-32 overflow-hidden">
+                    🧸
+                </div>
+            </div>
+
+            <p class="text-[9px] text-rose-500 tracking-widest uppercase font-black luxury-font">You Got a Prize!</p>
+            <h2 id="prize-name" class="text-xl font-extrabold text-slate-800 mt-1 mb-2">자이언트 말랑 곰인형</h2>
+            <p id="prize-description" class="text-xs text-slate-400 px-2 mb-5 leading-relaxed">
+                침대 위에 두면 세상을 다 가진 기분이 드는 푹신함 끝판왕 자이언트 곰인형입니다!
+            </p>
+
+            <!-- 동적 실시간 생성 QR 코드 슬롯 -->
+            <div class="bg-slate-50 p-3.5 rounded-2xl inline-block shadow-inner mb-2 relative border border-slate-100">
+                <div id="qrcode-container" class="w-32 h-32 flex items-center justify-center"></div>
+                <div class="text-[9px] text-slate-500 mt-2 font-bold flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-qrcode text-slate-400"></i>
+                    <span>스캔 시 모바일 경품 확인 링크</span>
+                </div>
+            </div>
+
+            <!-- 수동 제어판 풋액션 -->
+            <div class="grid grid-cols-2 gap-3 mt-5">
+                <button id="btn-share" class="py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1.5 shadow-md">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>상품명 공유하기</span>
+                </button>
+                <button id="btn-close-result" class="py-3 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-xl transition flex items-center justify-center space-x-1.5 shadow-md">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                    <span>한 번 더 뽑기</span>
+                </button>
+            </div>
+
+            <button id="btn-close-modal" class="absolute top-4 right-4 text-slate-300 hover:text-slate-600 transition">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 플레이 가이드 팝업 -->
+    <div id="guide-modal" class="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="w-full max-w-sm bg-white rounded-3xl p-6 text-slate-700 shadow-xl border border-white">
+            <h3 class="text-base font-black mb-4 text-center text-slate-800 border-b border-slate-100 pb-3 uppercase tracking-wider luxury-font">How To Play</h3>
+            <ul class="space-y-3 text-xs mb-5 leading-relaxed text-slate-500">
+                <li class="flex items-start"><span class="bg-slate-900 text-white rounded-full w-4 h-4 flex items-center justify-center mr-2 mt-0.5 text-[9px] font-bold">1</span> 화면 빈 곳을 터치 드래그하여 3D 기계를 상하좌우 부드럽게 감상하세요.</li>
+                <li class="flex items-start"><span class="bg-slate-900 text-white rounded-full w-4 h-4 flex items-center justify-center mr-2 mt-0.5 text-[9px] font-bold">2</span> 기계 전면에 튀어나온 <b>빨간색 3D 조이스틱 레버</b>를 직접 손가락으로 드래그해 조종하세요.</li>
+                <li class="flex items-start"><span class="bg-slate-900 text-white rounded-full w-4 h-4 flex items-center justify-center mr-2 mt-0.5 text-[9px] font-bold">3</span> <b>초록색 3D 버튼</b>을 클릭하면 집게가 물리적으로 하강해 캡슐을 움켜쥡니다.</li>
+                <li class="flex items-start"><span class="bg-slate-900 text-white rounded-full w-4 h-4 flex items-center justify-center mr-2 mt-0.5 text-[9px] font-bold">4</span> 획득한 보물 캡슐은 전용 QR코드와 함께 자랑스럽게 친구들과 공유하세요!</li>
+            </ul>
+            <button id="btn-close-guide" class="w-full py-3 bg-slate-900 hover:bg-slate-800 rounded-xl text-white text-xs font-bold transition">조작 가동하기</button>
+        </div>
+    </div>
+
+    <!-- 3D 가동 및 Firebase 통합 가동 엔진 -->
+    <script type="module">
+        // ----------------- [ Firebase SDK 초기화 세팅 ] -----------------
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, get, set, push, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCd7LUP_IDnbdLgIxyj6iGEFtwXbzwubjc",
+            authDomain: "database-4d830.firebaseapp.com",
+            databaseURL: "https://database-4d830-default-rtdb.firebaseio.com",
+            projectId: "database-4d830",
+            storageBucket: "database-4d830.firebasestorage.app",
+            messagingSenderId: "1011786036842",
+            appId: "1:1011786036842:web:f645d6af597e0c22b4bc13",
+            measurementId: "G-T5S9KKZ2G8"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // ----------------- [ 글로벌 3D 설정 및 세팅 ] -----------------
+        let scene, camera, renderer;
+        let machineGroup; // 기기 모든 프레임을 담을 탑그룹
+        let craneRailX, craneRailZ, craneCable, craneHead;
+        let clawProng1, clawProng2, clawProng3;
+        
+        // 실제 기기 데크 위 장착될 조작장치 모델
+        let modelJoystickBase, modelJoystickLever, modelButtonMesh;
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // 3D 뷰 궤도 조종 각도
+        let cameraRadius = 14;
+        let cameraTheta = 0.0; // 최초 정면 위치 조준
+        let cameraPhi = 1.35; // 눈높이 포커스
+        let isCameraDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        // 가챠 캡슐 정보
+        const capsules = [];
+        const capsuleColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xec4899];
+
+        // 크레인 이동 좌표 범위 및 감쇠
+        const bounds = { xMin: -1.7, xMax: 1.7, zMin: -1.7, zMax: 1.7, yTop: 8.2, yFloor: 2.2 };
+        let cranePos = { x: 0, y: 8.2, z: 0 };
+        let targetPos = { x: 0, z: 0 };
+
+        // 관성 요동 흔들림(Sway) 변수
+        let swayAngleX = 0, swayAngleZ = 0;
+        let swaySpeedX = 0, swaySpeedZ = 0;
+        let prevCraneX = 0, prevCraneZ = 0;
+
+        // 크레인 상태 모션 관리
+        const STATE_IDLE = 'IDLE';
+        const STATE_DESCENDING = 'DESCENDING';
+        const STATE_GRABBING = 'GRABBING';
+        const STATE_ASCENDING = 'ASCENDING';
+        const STATE_MOVING_TO_DROP = 'MOVING_TO_DROP';
+        const STATE_OPENING = 'OPENING';
+        const STATE_RETURNING = 'RETURNING';
+        let currentState = STATE_IDLE;
+        let actionTimer = 0;
+        let grabbedCapsule = null;
+        const dropChute = { x: -1.6, y: 2.2, z: -1.6 }; // 구멍 입구 좌표 고도 보정
+
+        // 조이스틱 드래그 제어 전용 상태 변수
+        let isJoystickDragging = false;
+        let joystickStartPos = { x: 0, y: 0 };
+        let joystickStartTarget = { x: 0, z: 0 };
+        let joystickOffset = { x: 0, z: 0 };
+
+        // 앱 상태 데이터
+        let coins = 5;
+        let inventory = 0;
+        let soundEnabled = true;
+        let audioCtx = null;
+
+        // Firebase 연동 상품 캐시 컨테이너
+        let firebasePrizes = [];
+        let currentPrize = null;
+
+        // ----------------- [ Realtime Database 동기화 핸들러 ] -----------------
+        async function fetchPrizesFromFirebase() {
+            try {
+                const prizesRef = ref(db, 'prizes');
+                const snapshot = await get(prizesRef);
+                
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    firebasePrizes = Object.entries(data).map(([key, val]) => ({
+                        id: key,
+                        name: val.name,
+                        url: val.url || "https://example.com",
+                        image: val.image || "",
+                        stock: val.stock !== undefined ? parseInt(val.stock) : 10,
+                        emoji: val.emoji || "🎁",
+                        desc: val.desc || "특별한 행운의 프리미엄 보물 상자!"
+                    }));
+                } else {
+                    // 데이터가 하나도 없는 경우 제공된 구조로 기초 스토어 초기 설정 진행
+                    const defaultPrizes = {
+                        "-A1": {
+                            "name": "제주 감귤청",
+                            "url": "https://example.com/item1",
+                            "image": "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&q=80&w=400",
+                            "stock": 10,
+                            "desc": "달콤하고 새콤한 제주도 직송 고품격 수제 감귤청!",
+                            "emoji": "🍊"
+                        },
+                        "-A2": {
+                            "name": "스타벅스 아메리카노",
+                            "url": "https://example.com/item2",
+                            "image": "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=400",
+                            "stock": 20,
+                            "desc": "바쁜 일상 속에 힐링을 주는 스타벅스 부드러운 아메리카노 기프티콘!",
+                            "emoji": "☕"
+                        }
+                    };
+                    await set(prizesRef, defaultPrizes);
+                    
+                    firebasePrizes = Object.entries(defaultPrizes).map(([key, val]) => ({
+                        id: key,
+                        ...val
+                    }));
+                }
+            } catch (error) {
+                console.error("Firebase Database 연동 오류, 로컬 백업 로딩:", error);
+                // 네트워크 순단 시 가동할 로컬 예비 안전 데이터
+                firebasePrizes = [
+                    { id: "-A1", name: "제주 감귤청", url: "https://example.com/item1", image: "", stock: 10, emoji: "🍊", desc: "고품격 수제 감귤청!" },
+                    { id: "-A2", name: "스타벅스 아메리카노", url: "https://example.com/item2", image: "", stock: 20, emoji: "☕", desc: "스타벅스 아메리카노 기프티콘!" }
+                ];
+            }
+        }
+
+        // ----------------- [ Web Audio API 효과음 엔진 ] -----------------
+        function playSound(type) {
+            if (!soundEnabled) return;
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const now = audioCtx.currentTime;
+
+                if (type === 'click') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600, now);
+                    osc.frequency.exponentialRampToValueAtTime(150, now + 0.1);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } else if (type === 'coin') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(987.77, now); 
+                    osc.frequency.setValueAtTime(1318.51, now + 0.08); 
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.setValueAtTime(0.1, now + 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'move') {
+                    if (Math.random() > 0.15) return;
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(120, now);
+                    osc.frequency.exponentialRampToValueAtTime(80, now + 0.05);
+                    gain.gain.setValueAtTime(0.05, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                } else if (type === 'drop') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.linearRampToValueAtTime(100, now + 0.4);
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                } else if (type === 'grab') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(180, now);
+                    osc.frequency.linearRampToValueAtTime(280, now + 0.25);
+                    gain.gain.setValueAtTime(0.06, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'open') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'win') {
+                    const notes = [523.25, 659.25, 783.99, 1046.50]; 
+                    notes.forEach((freq, idx) => {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+                        gain.gain.setValueAtTime(0.08, now + idx * 0.1);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.35);
+                        osc.start(now + idx * 0.1);
+                        osc.stop(now + idx * 0.1 + 0.35);
+                    });
+                }
+            } catch (e) {
+                console.warn("효과음 재생 에러:", e);
+            }
+        }
+
+        // ----------------- [ 3D 그래픽 초기 구축 ] -----------------
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth || window.innerWidth;
+            const height = container.clientHeight || window.innerHeight;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf1f5f9); 
+            scene.fog = new THREE.FogExp2(0xf1f5f9, 0.015);
+
+            camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 100);
+            const aspect = width / height;
+            if (aspect < 1) {
+                cameraRadius = 15.5;
+                camera.fov = 48;
+            } else {
+                cameraRadius = 12.8;
+                camera.fov = 40;
+            }
+            camera.updateProjectionMatrix();
+            updateCameraPosition();
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(width, height);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.0;
+
+            container.innerHTML = '';
+            container.appendChild(renderer.domElement);
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+            scene.add(ambient);
+
+            const mainLight = new THREE.DirectionalLight(0xffffff, 0.95);
+            mainLight.position.set(5, 15, 8);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 1024;
+            mainLight.shadow.mapSize.height = 1024;
+            mainLight.shadow.camera.near = 0.5;
+            mainLight.shadow.camera.far = 25;
+
+            const d = 8;
+            mainLight.shadow.camera.left = -d;
+            mainLight.shadow.camera.right = d;
+            mainLight.shadow.camera.top = d;
+            mainLight.shadow.camera.bottom = -d;
+            scene.add(mainLight);
+
+            const lateralLight = new THREE.DirectionalLight(0xe0f2fe, 0.45);
+            lateralLight.position.set(-6, 8, -5);
+            scene.add(lateralLight);
+
+            const groundGeo = new THREE.PlaneGeometry(50, 50);
+            const groundMat = new THREE.ShadowMaterial({ opacity: 0.05 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = 0;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            const grid = new THREE.GridHelper(50, 50, 0xd1d5db, 0xe5e7eb);
+            grid.position.y = 0.01;
+            scene.add(grid);
+
+            buildPremiumCabinet();
+            spawnCapsules(36);
+            animate();
+
+            container.addEventListener('mousedown', onPointerDown, false);
+            container.addEventListener('mousemove', onPointerMove, false);
+            container.addEventListener('mouseup', onPointerUp, false);
+            container.addEventListener('touchstart', onTouchStart, { passive: false });
+            container.addEventListener('touchmove', onTouchMove, { passive: false });
+            container.addEventListener('touchend', onTouchEnd, false);
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function updateCameraPosition() {
+            camera.position.x = cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+            camera.position.y = cameraRadius * Math.cos(cameraPhi) + 4.0;
+            camera.position.z = cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+            camera.lookAt(0, 4.0, 0); 
+        }
+
+        function buildPremiumCabinet() {
+            machineGroup = new THREE.Group();
+            scene.add(machineGroup);
+
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: 0xfdfdfd,
+                roughness: 0.12,
+                metalness: 0.05,
+                clearcoat: 0.4
+            });
+
+            const goldChromeMat = new THREE.MeshStandardMaterial({
+                color: 0xd4af37,
+                roughness: 0.1,
+                metalness: 0.95
+            });
+
+            const steelMat = new THREE.MeshStandardMaterial({
+                color: 0x94a3b8,
+                roughness: 0.15,
+                metalness: 0.85
+            });
+
+            const chromeMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.98, roughness: 0.02 });
+
+            const bottomGeo = new THREE.BoxGeometry(5.4, 2.2, 5.4);
+            const bottomMesh = new THREE.Mesh(bottomGeo, bodyMat);
+            bottomMesh.position.y = 1.1;
+            bottomMesh.receiveShadow = true;
+            bottomMesh.castShadow = true;
+            machineGroup.add(bottomMesh);
+
+            const garnishGeo = new THREE.BoxGeometry(5.46, 0.15, 5.46);
+            const garnish = new THREE.Mesh(garnishGeo, goldChromeMat);
+            garnish.position.y = 0.2;
+            machineGroup.add(garnish);
+
+            const legGeo = new THREE.CylinderGeometry(0.12, 0.18, 0.15, 8);
+            const legOffset = 2.4;
+            const legPositions = [
+                [-legOffset, 0.075, -legOffset],
+                [legOffset, 0.075, -legOffset],
+                [-legOffset, 0.075, legOffset],
+                [legOffset, 0.075, legOffset]
+            ];
+            legPositions.forEach(pos => {
+                const leg = new THREE.Mesh(legGeo, steelMat);
+                leg.position.set(...pos);
+                machineGroup.add(leg);
+            });
+
+            const doorFrameGeo = new THREE.BoxGeometry(1.4, 1.1, 0.25);
+            const doorFrameMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
+            const doorFrame = new THREE.Mesh(doorFrameGeo, doorFrameMat);
+            doorFrame.position.set(0, 1.1, 2.6); 
+            machineGroup.add(doorFrame);
+
+            const doorPlateGeo = new THREE.BoxGeometry(1.1, 0.8, 0.05);
+            const doorPlateMat = new THREE.MeshPhysicalMaterial({ color: 0x1e293b, transparent: true, opacity: 0.8, transmission: 0.3 });
+            const doorPlate = new THREE.Mesh(doorPlateGeo, doorPlateMat);
+            doorPlate.position.set(0, 1.1, 2.7);
+            machineGroup.add(doorPlate);
+
+            const headerGeo = new THREE.BoxGeometry(5.4, 0.8, 5.4);
+            const headerMesh = new THREE.Mesh(headerGeo, bodyMat);
+            headerMesh.position.y = 8.6;
+            headerMesh.castShadow = true;
+            machineGroup.add(headerMesh);
+
+            const signPlateGeo = new THREE.BoxGeometry(3.6, 0.5, 0.1);
+            const signPlateMat = new THREE.MeshPhysicalMaterial({
+                color: 0xec4899,
+                emissive: 0xec4899,
+                emissiveIntensity: 0.8,
+                roughness: 0,
+                transparent: true,
+                opacity: 0.95
+            });
+            const signPlate = new THREE.Mesh(signPlateGeo, signPlateMat);
+            signPlate.position.set(0, 8.6, 2.66);
+            machineGroup.add(signPlate);
+
+            const pillarGeo = new THREE.BoxGeometry(0.15, 6.8, 0.15);
+            const pillarPositions = [
+                [-2.6, 5.0, -2.6],
+                [2.6, 5.0, -2.6],
+                [-2.6, 5.0, 2.6],
+                [2.6, 5.0, 2.6]
+            ];
+            pillarPositions.forEach(pos => {
+                const pillar = new THREE.Mesh(pillarGeo, steelMat);
+                pillar.position.set(...pos);
+                pillar.castShadow = true;
+                machineGroup.add(pillar);
+            });
+
+            const bulbGeo = new THREE.SphereGeometry(0.04, 8, 8);
+            const bulbMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
+            const ledStripGroup = new THREE.Group();
+            const stripX = [-2.5, 2.5];
+            const stripZ = [-2.5, 2.5];
+            stripX.forEach(x => {
+                stripZ.forEach(z => {
+                    for (let h = 0; h < 7; h++) {
+                        const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+                        bulb.position.set(x, 2.4 + h * 0.8, z);
+                        ledStripGroup.add(bulb);
+                    }
+                });
+            });
+            machineGroup.add(ledStripGroup);
+
+            const barrierGeo = new THREE.BoxGeometry(1.6, 1.0, 0.05);
+            const barrierGlassMat = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.25,
+                transmission: 0.95,
+                ior: 1.45
+            });
+            const barrierX = new THREE.Mesh(barrierGeo, barrierGlassMat);
+            barrierX.position.set(-1.8, 2.5, -0.9);
+            machineGroup.add(barrierX);
+
+            const barrierZ = barrierX.clone();
+            barrierZ.rotation.y = Math.PI / 2;
+            barrierZ.position.set(-0.9, 2.5, -1.8);
+            machineGroup.add(barrierZ);
+
+            const holeGeo = new THREE.BoxGeometry(1.5, 0.02, 1.5);
+            const holeMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+            const hole = new THREE.Mesh(holeGeo, holeMat);
+            hole.position.set(-1.8, 2.01, -1.8);
+            machineGroup.add(hole);
+
+            const crystalGeo = new THREE.BoxGeometry(5.1, 5.8, 5.1);
+            const crystalMat = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.05,
+                transmission: 0.98,
+                roughness: 0,
+                depthWrite: false
+            });
+            const glassCase = new THREE.Mesh(crystalGeo, crystalMat);
+            glassCase.position.y = 5.0;
+            machineGroup.add(glassCase);
+
+            const deckGroup = new THREE.Group();
+            const deckPlateGeo = new THREE.BoxGeometry(3.2, 0.45, 1.0);
+            const deckPlate = new THREE.Mesh(deckPlateGeo, goldChromeMat);
+            deckPlate.position.set(0, 4.1, 2.7);
+            deckPlate.rotation.x = -Math.PI / 20;
+            deckPlate.castShadow = true;
+            deckGroup.add(deckPlate);
+
+            const coinSlotBoxGeo = new THREE.BoxGeometry(0.6, 0.35, 0.15);
+            const coinSlotBox = new THREE.Mesh(coinSlotBoxGeo, steelMat);
+            coinSlotBox.position.set(1.1, 4.05, 3.22);
+            deckGroup.add(coinSlotBox);
+
+            const coinInsertGeo = new THREE.BoxGeometry(0.04, 0.15, 0.04);
+            const coinInsertMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const coinInsert = new THREE.Mesh(coinInsertGeo, coinInsertMat);
+            coinInsert.position.set(1.1, 4.05, 3.3);
+            deckGroup.add(coinInsert);
+
+            const joyBaseGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.05, 16);
+            modelJoystickBase = new THREE.Mesh(joyBaseGeo, steelMat);
+            modelJoystickBase.position.set(-0.6, 4.34, 2.75);
+            modelJoystickBase.rotation.x = -Math.PI / 20;
+            deckGroup.add(modelJoystickBase);
+
+            modelJoystickLever = new THREE.Group();
+            modelJoystickLever.name = "JoystickLever"; 
+            modelJoystickLever.position.set(-0.6, 4.34, 2.75);
+            modelJoystickLever.rotation.x = -Math.PI / 20;
+
+            const shaftGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.75, 8);
+            shaftGeo.translate(0, 0.38, 0); 
+            const shaft = new THREE.Mesh(shaftGeo, chromeMat);
+            modelJoystickLever.add(shaft);
+
+            const ballGeo = new THREE.SphereGeometry(0.18, 16, 16);
+            const ballMat = new THREE.MeshStandardMaterial({
+                color: 0xef4444,
+                metalness: 0.1,
+                roughness: 0.05,
+                clearcoat: 1.0
+            });
+            const ball = new THREE.Mesh(ballGeo, ballMat);
+            ball.position.y = 0.75;
+            ball.castShadow = true;
+            modelJoystickLever.add(ball);
+
+            const invisibleHitboxGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.2, 8);
+            const invisibleHitboxMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+            const invisibleHitbox = new THREE.Mesh(invisibleHitboxGeo, invisibleHitboxMat);
+            invisibleHitbox.position.y = 0.4;
+            invisibleHitbox.name = "JoystickHitbox"; 
+            modelJoystickLever.add(invisibleHitbox);
+
+            deckGroup.add(modelJoystickLever);
+
+            const btnRingGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.08, 16);
+            const btnRing = new THREE.Mesh(btnRingGeo, steelMat);
+            btnRing.position.set(0.6, 4.34, 2.75);
+            btnRing.rotation.x = -Math.PI / 20;
+            deckGroup.add(btnRing);
+
+            const btnCapGeo = new THREE.CylinderGeometry(0.26, 0.26, 0.08, 16);
+            const btnCapMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.1, emissive: 0x059669, emissiveIntensity: 0.4 });
+            modelButtonMesh = new THREE.Mesh(btnCapGeo, btnCapMat);
+            modelButtonMesh.name = "ArcadeButton"; 
+            modelButtonMesh.position.set(0.6, 4.38, 2.77);
+            modelButtonMesh.rotation.x = -Math.PI / 20;
+            modelButtonMesh.castShadow = true;
+            deckGroup.add(modelButtonMesh);
+
+            machineGroup.add(deckGroup);
+
+            const railGeo = new THREE.CylinderGeometry(0.035, 0.035, 5.0, 8);
+            railGeo.rotateZ(Math.PI / 2);
+            craneRailX = new THREE.Mesh(railGeo, chromeMat);
+            craneRailX.position.set(0, 8.0, 0);
+            machineGroup.add(craneRailX);
+
+            const railZGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.8, 8);
+            railZGeo.rotateX(Math.PI / 2);
+            craneRailZ = new THREE.Mesh(railZGeo, bodyMat);
+            craneRailZ.position.set(0, 8.0, 0);
+            machineGroup.add(craneRailZ);
+
+            const cableGeo = new THREE.CylinderGeometry(0.008, 0.008, 1, 6);
+            const cableMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+            craneCable = new THREE.Mesh(cableGeo, cableMat);
+            craneCable.position.set(0, 7.6, 0);
+            machineGroup.add(craneCable);
+
+            const headGeo = new THREE.SphereGeometry(0.18, 16, 16);
+            craneHead = new THREE.Mesh(headGeo, goldChromeMat);
+            craneHead.position.set(0, 7.4, 0);
+            machineGroup.add(craneHead);
+
+            const prongGeo = new THREE.BoxGeometry(0.05, 0.45, 0.08);
+            prongGeo.translate(0, -0.22, 0);
+
+            clawProng1 = new THREE.Mesh(prongGeo, chromeMat);
+            clawProng1.position.set(0, -0.08, 0.12);
+            clawProng1.rotation.x = Math.PI / 6;
+            craneHead.add(clawProng1);
+
+            clawProng2 = new THREE.Mesh(prongGeo, chromeMat);
+            clawProng2.position.set(-0.1, -0.08, -0.06);
+            clawProng2.rotation.x = -Math.PI / 12;
+            clawProng2.rotation.y = Math.PI * 2 / 3;
+            clawProng2.rotation.z = -Math.PI / 12;
+            craneHead.add(clawProng2);
+
+            clawProng3 = new THREE.Mesh(prongGeo, chromeMat);
+            clawProng3.position.set(0.1, -0.08, -0.06);
+            clawProng3.rotation.x = -Math.PI / 12;
+            clawProng3.rotation.y = -Math.PI * 2 / 3;
+            clawProng3.rotation.z = Math.PI / 12;
+            craneHead.add(clawProng3);
+        }
+
+        function spawnCapsules(count) {
+            for (let i = 0; i < count; i++) {
+                const capsuleGroup = new THREE.Group();
+                const radius = 0.34;
+
+                const topGeo = new THREE.SphereGeometry(radius, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+                const colorHex = capsuleColors[Math.floor(Math.random() * capsuleColors.length)];
+                const topMat = new THREE.MeshStandardMaterial({
+                    color: colorHex,
+                    roughness: 0.1,
+                    metalness: 0.1,
+                    clearcoat: 0.5
+                });
+                const topMesh = new THREE.Mesh(topGeo, topMat);
+                capsuleGroup.add(topMesh);
+
+                const bottomGeo = new THREE.SphereGeometry(radius, 16, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+                const bottomMat = new THREE.MeshPhysicalMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.8,
+                    roughness: 0.15,
+                    transmission: 0.82
+                });
+                const bottomMesh = new THREE.Mesh(bottomGeo, bottomMat);
+                capsuleGroup.add(bottomMesh);
+
+                const ringGeo = new THREE.TorusGeometry(radius + 0.01, 0.015, 8, 20);
+                const ringMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9, roughness: 0.1 });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.rotation.x = Math.PI / 2;
+                capsuleGroup.add(ring);
+
+                const layer = Math.floor(i / 10);
+                const idx = i % 10;
+                const angle = (idx / 10) * Math.PI * 2 + Math.random() * 0.4;
+                const dist = 0.3 + Math.random() * 1.1;
+                
+                let posX = Math.cos(angle) * dist;
+                let posZ = Math.sin(angle) * dist;
+                const posY = 2.54 + layer * 0.58 + (Math.random() - 0.5) * 0.05;
+
+                if (posX < -1.0 && posZ < -1.0) {
+                    posX += 1.3;
+                    posZ += 1.3;
+                }
+
+                capsuleGroup.position.set(posX, posY, posZ);
+
+                capsuleGroup.rotation.set(
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI,
+                    Math.random() * Math.PI
+                );
+
+                capsuleGroup.castShadow = true;
+                capsuleGroup.receiveShadow = true;
+                capsuleGroup.userData = {
+                    id: i,
+                    radius: radius,
+                    color: colorHex,
+                    velocity: new THREE.Vector3(0, 0, 0)
+                };
+
+                scene.add(capsuleGroup);
+                capsules.push(capsuleGroup);
+            }
+        }
+
+        function updateCranePhysics(deltaTime) {
+            if (isNaN(deltaTime) || deltaTime <= 0) return;
+
+            const deltaX = cranePos.x - prevCraneX;
+            const deltaZ = cranePos.z - prevCraneZ;
+            prevCraneX = cranePos.x;
+            prevCraneZ = cranePos.z;
+
+            swaySpeedX -= deltaX * 16.0;
+            swaySpeedZ -= deltaZ * 16.0;
+
+            swaySpeedX += -swayAngleX * 8.0;
+            swaySpeedZ += -swayAngleZ * 8.0;
+
+            swaySpeedX *= 0.94;
+            swaySpeedZ *= 0.94;
+
+            swayAngleX += swaySpeedX * deltaTime;
+            swayAngleZ += swaySpeedZ * deltaTime;
+
+            if (currentState === STATE_IDLE) {
+                cranePos.x += (targetPos.x - cranePos.x) * 0.08;
+                cranePos.z += (targetPos.z - cranePos.z) * 0.08;
+            }
+
+            switch (currentState) {
+                case STATE_DESCENDING:
+                    cranePos.y -= deltaTime * 3.8;
+                    if (cranePos.y <= bounds.yFloor + 0.8) {
+                        cranePos.y = bounds.yFloor + 0.8;
+                        currentState = STATE_GRABBING;
+                        actionTimer = 0;
+                        playSound('grab');
+                    }
+                    break;
+
+                case STATE_GRABBING:
+                    actionTimer += deltaTime;
+                    clawProng1.rotation.x += (0.02 - clawProng1.rotation.x) * 0.12;
+                    clawProng2.rotation.x += (-0.02 - clawProng2.rotation.x) * 0.12;
+                    clawProng3.rotation.x += (-0.02 - clawProng3.rotation.x) * 0.12;
+
+                    if (!grabbedCapsule && actionTimer > 0.18) {
+                        let nearest = null;
+                        let minDist = 1.1;
+                        const tipPos = new THREE.Vector3(cranePos.x, cranePos.y - 0.5, cranePos.z);
+
+                        capsules.forEach(cap => {
+                            const d = cap.position.distanceTo(tipPos);
+                            if (d < minDist) {
+                                minDist = d;
+                                nearest = cap;
+                            }
+                        });
+
+                        if (nearest) {
+                            grabbedCapsule = nearest;
+                        }
+                    }
+
+                    if (actionTimer >= 0.8) {
+                        currentState = STATE_ASCENDING;
+                    }
+                    break;
+
+                case STATE_ASCENDING:
+                    cranePos.y += deltaTime * 3.2;
+                    if (grabbedCapsule) {
+                        const offset = new THREE.Vector3(
+                            -Math.sin(swayAngleX) * 0.45,
+                            -Math.cos(swayAngleX) * Math.cos(swayAngleZ) * 0.45,
+                            -Math.sin(swayAngleZ) * 0.45
+                        );
+                        grabbedCapsule.position.copy(craneHead.position).add(offset);
+                    }
+                    if (cranePos.y >= bounds.yTop) {
+                        cranePos.y = bounds.yTop;
+                        currentState = STATE_MOVING_TO_DROP;
+                    }
+                    break;
+
+                case STATE_MOVING_TO_DROP:
+                    const dx = dropChute.x - cranePos.x;
+                    const dz = dropChute.z - cranePos.z;
+                    cranePos.x += dx * 0.04;
+                    cranePos.z += dz * 0.04;
+
+                    if (grabbedCapsule) {
+                        const offset = new THREE.Vector3(
+                            -Math.sin(swayAngleX) * 0.45,
+                            -Math.cos(swayAngleX) * Math.cos(swayAngleZ) * 0.45,
+                            -Math.sin(swayAngleZ) * 0.45
+                        );
+                        grabbedCapsule.position.copy(craneHead.position).add(offset);
+
+                        if (Math.abs(swayAngleX) > 0.45 || Math.abs(swayAngleZ) > 0.45) {
+                            const dropped = grabbedCapsule;
+                            grabbedCapsule = null;
+                            dropped.userData.velocity.set(swaySpeedX * 0.3, -1.5, swaySpeedZ * 0.3);
+                            showToast("흔들림 충격으로 캡슐을 놓쳤습니다! 😢");
+                        }
+                    }
+
+                    if (Math.abs(dx) < 0.1 && Math.abs(dz) < 0.1) {
+                        currentState = STATE_OPENING;
+                        actionTimer = 0;
+                    }
+                    break;
+
+                case STATE_OPENING:
+                    actionTimer += deltaTime;
+                    clawProng1.rotation.x += (Math.PI / 4 - clawProng1.rotation.x) * 0.15;
+                    clawProng2.rotation.x += (-Math.PI / 4 - clawProng2.rotation.x) * 0.15;
+                    clawProng3.rotation.x += (-Math.PI / 4 - clawProng3.rotation.x) * 0.15;
+
+                    if (grabbedCapsule) {
+                        const dropped = grabbedCapsule;
+                        grabbedCapsule = null;
+                        dropped.userData.velocity.set(0, -2, 0);
+                        setTimeout(() => {
+                            showCapsuleReveal(dropped);
+                        }, 900);
+                    }
+
+                    if (actionTimer >= 1.0) {
+                        currentState = STATE_RETURNING;
+                    }
+                    break;
+
+                case STATE_RETURNING:
+                    cranePos.x += (0 - cranePos.x) * 0.06;
+                    cranePos.z += (0 - cranePos.z) * 0.06;
+
+                    clawProng1.rotation.x += (Math.PI / 6 - clawProng1.rotation.x) * 0.08;
+                    clawProng2.rotation.x += (-Math.PI / 12 - clawProng2.rotation.x) * 0.08;
+                    clawProng3.rotation.x += (-Math.PI / 12 - clawProng3.rotation.x) * 0.08;
+
+                    if (Math.abs(cranePos.x) < 0.08 && Math.abs(cranePos.z) < 0.08) {
+                        currentState = STATE_IDLE;
+                        targetPos.x = 0;
+                        targetPos.z = 0;
+                    }
+                    break;
+            }
+
+            if (craneHead) {
+                craneHead.position.set(cranePos.x, cranePos.y - 0.4, cranePos.z);
+                craneHead.rotation.set(swayAngleZ, 0, -swayAngleX);
+            }
+
+            if (craneCable) {
+                const cabLen = 8.2 - cranePos.y + 0.15;
+                craneCable.scale.set(1, cabLen, 1);
+                craneCable.position.set(cranePos.x, 8.2 - (cabLen / 2), cranePos.z);
+            }
+
+            if (craneRailZ) craneRailZ.position.set(cranePos.x, 8.0, cranePos.z);
+            if (craneRailX) craneRailX.position.z = cranePos.z;
+
+            const wallLimit = 2.05; 
+            const innerHoleLimit = -1.25;
+            const floorLevel = 2.54; 
+
+            capsules.forEach(cap => {
+                if (cap !== grabbedCapsule) {
+                    if (cap.position.y > floorLevel) {
+                        cap.userData.velocity.y -= 9.8 * deltaTime;
+                        cap.position.addScaledVector(cap.userData.velocity, deltaTime);
+                    } else {
+                        const isInHole = (cap.position.x < innerHoleLimit && cap.position.z < innerHoleLimit);
+                        if (!isInHole) {
+                            cap.position.y = floorLevel;
+                            cap.userData.velocity.set(0, 0, 0);
+                        } else {
+                            cap.userData.velocity.y -= 9.8 * deltaTime;
+                            cap.position.addScaledVector(cap.userData.velocity, deltaTime);
+                        }
+                    }
+
+                    cap.position.x = Math.max(-wallLimit, Math.min(wallLimit, cap.position.x));
+                    cap.position.z = Math.max(-wallLimit, Math.min(wallLimit, cap.position.z));
+
+                    if (cap.position.x < innerHoleLimit && cap.position.z < innerHoleLimit) {
+                        if (cap.position.y <= floorLevel + 0.1) {
+                            cap.position.y -= deltaTime * 3.5;
+                            cap.scale.multiplyScalar(0.92);
+                        }
+                    } else {
+                        if (cap.position.y < floorLevel) {
+                            cap.position.y = floorLevel;
+                            cap.userData.velocity.y = 0;
+                        }
+                    }
+                }
+            });
+
+            if (!isJoystickDragging) {
+                joystickOffset.x += (0 - joystickOffset.x) * 0.2;
+                joystickOffset.z += (0 - joystickOffset.z) * 0.2;
+            }
+
+            if (modelJoystickLever) {
+                const tiltLimit = 0.55;
+                const rotX = -(joystickOffset.z * tiltLimit) - Math.PI / 20;
+                const rotZ = -(joystickOffset.x * tiltLimit);
+                modelJoystickLever.rotation.x += (rotX - modelJoystickLever.rotation.x) * 0.15;
+                modelJoystickLever.rotation.z += (rotZ - modelJoystickLever.rotation.z) * 0.15;
+            }
+        }
+
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            try {
+                const deltaTime = clock.getDelta();
+                updateCranePhysics(deltaTime);
+                renderer.render(scene, camera);
+            } catch (error) {
+                console.error("Three.js loop crash avoided:", error);
+            }
+        }
+
+        function onPointerDown(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(machineGroup.children, true);
+
+            let hitJoystick = false;
+            let hitButton = false;
+
+            for (let hit of intersects) {
+                if (hit.object.name === "JoystickHitbox" || hit.object.name === "JoystickLever" || hit.object.parent?.name === "JoystickLever") {
+                    hitJoystick = true;
+                    break;
+                }
+                if (hit.object.name === "ArcadeButton") {
+                    hitButton = true;
+                    break;
+                }
+            }
+
+            if (hitJoystick && currentState === STATE_IDLE) {
+                isJoystickDragging = true;
+                isCameraDragging = false; 
+                joystickStartPos.x = clientX;
+                joystickStartPos.y = clientY;
+                joystickStartTarget.x = targetPos.x;
+                joystickStartTarget.z = targetPos.z;
+            } else if (hitButton && currentState === STATE_IDLE) {
+                triggerDropButton();
+            } else {
+                isCameraDragging = true;
+                previousMousePosition = {
+                    x: clientX,
+                    y: clientY
+                };
+            }
+        }
+
+        function onPointerMove(event) {
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+            if (isJoystickDragging && currentState === STATE_IDLE) {
+                const deltaX = clientX - joystickStartPos.x;
+                const deltaY = clientY - joystickStartPos.y;
+
+                const sens = 0.012; 
+                
+                const cosT = Math.cos(cameraTheta);
+                const sinT = Math.sin(cameraTheta);
+                
+                const rotatedDeltaX = deltaX * cosT - deltaY * sinT;
+                const rotatedDeltaZ = deltaX * sinT + deltaY * cosT;
+
+                targetPos.x = Math.max(bounds.xMin, Math.min(bounds.xMax, joystickStartTarget.x + rotatedDeltaX * sens));
+                targetPos.z = Math.max(bounds.zMin, Math.min(bounds.zMax, joystickStartTarget.z + rotatedDeltaZ * sens));
+                
+                const joyScale = 0.007;
+                joystickOffset.x = Math.max(-1.0, Math.min(1.0, rotatedDeltaX * joyScale));
+                joystickOffset.z = Math.max(-1.0, Math.min(1.0, rotatedDeltaZ * joyScale));
+
+                playSound('move');
+            } else if (isCameraDragging) {
+                const deltaMove = {
+                    x: clientX - previousMousePosition.x,
+                    y: clientY - previousMousePosition.y
+                };
+
+                cameraTheta -= deltaMove.x * 0.007;
+                cameraPhi -= deltaMove.y * 0.007;
+
+                cameraPhi = Math.max(0.4, Math.min(Math.PI / 2 - 0.05, cameraPhi));
+                updateCameraPosition();
+
+                previousMousePosition = {
+                    x: clientX,
+                    y: clientY
+                };
+            }
+        }
+
+        function onPointerUp() {
+            isJoystickDragging = false; 
+            isCameraDragging = false;
+        }
+
+        function onTouchStart(event) {
+            onPointerDown(event);
+            event.preventDefault();
+        }
+
+        function onTouchMove(event) {
+            onPointerMove(event);
+            event.preventDefault();
+        }
+
+        function onTouchEnd() {
+            onPointerUp();
+        }
+
+        function triggerDropButton() {
+            if (currentState !== STATE_IDLE) return;
+            if (coins <= 0) {
+                showToast("동전이 부족합니다! 하단에서 충전하세요.");
+                return;
+            }
+
+            if (modelButtonMesh) {
+                modelButtonMesh.position.y -= 0.12;
+                setTimeout(() => {
+                    modelButtonMesh.position.y += 0.12;
+                }, 150);
+            }
+
+            coins--;
+            document.getElementById('coin-count').textContent = String(coins).padStart(2, '0');
+            playSound('click');
+            playSound('drop');
+            currentState = STATE_DESCENDING;
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth || window.innerWidth;
+            const height = container.clientHeight || window.innerHeight;
+
+            camera.aspect = width / height;
+            const aspect = width / height;
+            if (aspect < 1) {
+                cameraRadius = 15.5;
+                camera.fov = 48;
+            } else {
+                cameraRadius = 12.8;
+                camera.fov = 40;
+            }
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+            updateCameraPosition();
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast-message');
+            toast.querySelector('span').textContent = msg;
+            toast.style.opacity = '1';
+            setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 3000);
+        }
+
+        // ----------------- [ 캡슐 개봉 및 Firebase DB 트랜잭션 기록 ] -----------------
+        const capsuleModal = document.getElementById('capsule-animation-modal');
+        const resultModal = document.getElementById('result-modal');
+        const capsuleTop = document.getElementById('capsule-top');
+        const capsuleBottom = document.getElementById('capsule-bottom');
+        const capsuleGlow = document.getElementById('capsule-glow');
+
+        function showCapsuleReveal(targetCap) {
+            capsuleModal.classList.remove('hidden');
+            capsuleTop.classList.remove('capsule-top-split');
+            capsuleBottom.classList.remove('capsule-bottom-split');
+            capsuleGlow.style.opacity = '0';
+            capsuleGlow.style.transform = 'scale(0.5)';
+
+            const hex = '#' + targetCap.userData.color.toString(16).padStart(6, '0');
+            capsuleTop.style.background = `linear-gradient(to top, ${hex}, #fda4af)`;
+
+            setTimeout(() => {
+                playSound('open');
+                capsuleTop.classList.add('capsule-top-split');
+                capsuleBottom.classList.add('capsule-bottom-split');
+                capsuleGlow.style.opacity = '1';
+                capsuleGlow.style.transform = 'scale(1.5)';
+                setTimeout(() => {
+                    capsuleModal.classList.add('hidden');
+                    openWinnerPopup();
+                }, 1200);
+            }, 1000);
+
+            const idx = capsules.indexOf(targetCap);
+            if (idx > -1) capsules.splice(idx, 1);
+            scene.remove(targetCap);
+        }
+
+        async function openWinnerPopup() {
+            playSound('win');
+            
+            // 실시간 재고(stock > 0)가 존재하는 상품 중 랜덤 선택
+            const activePrizes = firebasePrizes.filter(p => p.stock > 0);
+            
+            if (activePrizes.length > 0) {
+                currentPrize = activePrizes[Math.floor(Math.random() * activePrizes.length)];
+                
+                // 1단계. Firebase 실시간 데이터베이스 재고 1 차감 수량 동기화
+                try {
+                    const nextStock = Math.max(0, currentPrize.stock - 1);
+                    const targetPrizeRef = ref(db, `prizes/${currentPrize.id}`);
+                    await update(targetPrizeRef, { stock: nextStock });
+                    currentPrize.stock = nextStock; // 로컬 캐시 업데이트
+                    
+                    // 2단계. Firebase 'wins' 경로에 승리 이력 트랜잭션 기록 적재
+                    const winsRef = ref(db, 'wins');
+                    const newWinPushRef = push(winsRef);
+                    await set(newWinPushRef, {
+                        prizeId: currentPrize.id,
+                        name: currentPrize.name,
+                        url: currentPrize.url,
+                        timestamp: Date.now()
+                    });
+                } catch (dbError) {
+                    console.error("Firebase 실시간 동기화 업데이트 오류:", dbError);
+                }
+            } else {
+                // 재고 소진 시 디폴트 보너스 폴백
+                currentPrize = {
+                    name: "스페셜 골든 가챠 찬스권",
+                    url: "https://example.com",
+                    image: "",
+                    desc: "준비된 모든 상품의 재고가 일시적으로 마감되었습니다! 관리자에게 문의해 재고를 충전하세요.",
+                    emoji: "🎟️"
+                };
+            }
+
+            // UI 바인딩 및 이미지 렌더링 최적화
+            const prizeEmojiContainer = document.getElementById('prize-emoji');
+            if (currentPrize.image && currentPrize.image.startsWith('http')) {
+                // 고화질 상품 링크 이미지 로딩 구조 설계 (실패 시 이모지 대체 폴백 적용)
+                prizeEmojiContainer.innerHTML = `<img src="${currentPrize.image}" class="w-full h-full object-cover rounded-xl" onerror="this.onerror=null; this.parentNode.innerHTML='${currentPrize.emoji || '🎁'}';" />`;
+            } else {
+                prizeEmojiContainer.innerHTML = currentPrize.emoji || "🎁";
+            }
+
+            document.getElementById('prize-name').textContent = currentPrize.name;
+            document.getElementById('prize-description').textContent = currentPrize.desc;
+            
+            inventory++;
+            document.getElementById('inventory-count').textContent = String(inventory).padStart(2, '0');
+
+            // 동적 QR 코드 생성 (사용자 고유 획득 URL 반사)
+            const qrBox = document.getElementById('qrcode-container');
+            qrBox.innerHTML = '';
+            
+            new QRCode(qrBox, {
+                text: currentPrize.url,
+                width: 120,
+                height: 120,
+                colorDark : "#0f172a",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+
+            resultModal.classList.remove('hidden');
+            
+            // 데이터 변경이 완료되었으므로 기프트 내부 목록 비동기 새로고침 진행
+            fetchPrizesFromFirebase();
+        }
+
+        // Web Share API 및 주소 클립보드 백업 복사
+        const btnShare = document.getElementById('btn-share');
+        btnShare.addEventListener('click', async () => {
+            const shareUrl = currentPrize ? currentPrize.url : window.location.href;
+            const prizeName = currentPrize ? currentPrize.name : "비밀 가챠 경품";
+            const shareMsg = `🎁 [CHAMPION CLAW] 대박! 인형뽑기 기계에서 손맛 가득하게 [${prizeName}] 뽑았어요! 실시간 3D 조이스틱으로 직접 운전하며 뽑는 캡슐가챠, 같이 한 판 해볼래요? ✨`;
+
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'Premium 3D Gacha',
+                        text: shareMsg,
+                        url: shareUrl
+                    });
+                } catch (e) {
+                    console.log('공유 취소');
+                }
+            } else {
+                const temp = document.createElement('textarea');
+                document.body.appendChild(temp);
+                temp.value = `${shareMsg}\n기계 타러 가기: ${shareUrl}`;
+                temp.select();
+                try {
+                    document.execCommand('copy');
+                    showToast("복사 완료! 카톡 창에 붙여넣어 친구에게 알려보세요! 📋");
+                } catch (err) {
+                    showToast("복사 기능을 지원하지 않는 디바이스 환경입니다.");
+                }
+                document.body.removeChild(temp);
+            }
+        });
+
+        // 무료 코인 공급
+        document.getElementById('btn-add-coin').addEventListener('click', () => {
+            coins += 5;
+            document.getElementById('coin-count').textContent = String(coins).padStart(2, '0');
+            playSound('coin');
+            showToast("동전이 가득 들어왔습니다! 🪙 (+5 COINS)");
+        });
+
+        // 닫기 및 리셋 조작
+        document.getElementById('btn-close-result').addEventListener('click', () => {
+            resultModal.classList.add('hidden');
+        });
+
+        document.getElementById('btn-close-modal').addEventListener('click', () => {
+            resultModal.classList.add('hidden');
+        });
+
+        const guideModal = document.getElementById('guide-modal');
+        document.getElementById('btn-how-to').addEventListener('click', () => {
+            guideModal.classList.remove('hidden');
+        });
+
+        document.getElementById('btn-close-guide').addEventListener('click', () => {
+            guideModal.classList.add('hidden');
+        });
+
+        // 음소거 제어
+        const soundBtn = document.getElementById('sound-toggle');
+        soundBtn.addEventListener('click', () => {
+            soundEnabled = !soundEnabled;
+            if (soundEnabled) {
+                soundBtn.innerHTML = '<i class="fa-solid fa-volume-high text-sm"></i>';
+                showToast("음향 효과음이 활성화되었습니다. 🔊");
+            } else {
+                soundBtn.innerHTML = '<i class="fa-solid fa-volume-xmark text-sm"></i>';
+                showToast("음소거 처리되었습니다. 🔇");
+            }
+        });
+
+        // 브라우저 시작 구동
+        window.onload = async () => {
+            // 3D 구동 이전에 Firebase 데이터 로딩 우선 보장
+            await fetchPrizesFromFirebase();
+            init3D();
+            setTimeout(() => {
+                showToast("기기 앞면의 빨간색 3D 레버를 직접 드래그해서 움직여보세요! 🕹️");
+            }, 1200);
+        };
+    </script>
+</body>
+</html>
