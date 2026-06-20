@@ -3,35 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>쿠폰 사용하기</title>
+    <title>쿠폰 관리 및 사용 사이트</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 400px; margin: 0 auto; }
-        .container { border: 1px solid #ccc; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        input { width: 100%; padding: 100px; padding: 10px; box-sizing: border-box; margin-bottom: 10px; }
-        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; }
+        .container { border: 1px solid #ccc; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); background-color: #fff; margin-bottom: 20px; }
+        input { width: 100%; padding: 10px; box-sizing: border-box; margin-bottom: 10px; }
+        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
         button:hover { background-color: #0056b3; }
         #message { margin-top: 15px; font-weight: bold; text-align: center; }
         .success { color: green; }
         .error { color: red; }
+
+        /* 쿠폰 목록 테이블 스타일 */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; word-break: break-all; }
+        th { background-color: #f2f2f2; }
+        .status-unused { color: green; font-weight: bold; }
+        .status-used { color: #aaa; text-decoration: line-through; }
+        .coupon-code { font-family: monospace; background: #eee; padding: 2px 5px; border-radius: 3px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>🎁 쿠폰 등록 / 사용</h2>
-    <input type="text" id="couponInput" placeholder="쿠폰 코드를 입력하세요">
+    <h2>🎁 쿠폰 사용하기</h2>
+    <input type="text" id="couponInput" placeholder="쿠폰 코드(고유 ID)를 입력하세요">
     <button id="useBtn">쿠폰 사용하기</button>
     <div id="message"></div>
 </div>
 
+<div class="container">
+    <h2>📋 보유 중인 모든 쿠폰 목록</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>쿠폰 코드 (ID)</th>
+                <th>쿠폰 이름 (상품)</th>
+                <th>상태</th>
+            </tr>
+        </thead>
+        <tbody id="couponListBody">
+            <tr>
+                <td colspan="3" style="text-align: center; color: #888;">쿠폰 목록을 불러오는 중입니다...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
 <script type="module">
-    // 필요한 Firebase SDK 임포트
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
-    // 데이터베이스 조작을 위한 기능 추가
-    import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { getDatabase, ref, get, update, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // 보내주신 파이어베이스 설정값
+    // 파이어베이스 설정값
     const firebaseConfig = {
         apiKey: "AIzaSyCd7LUP_IDnbdLgIxyj6iGEFtwXbzwubjc",
         authDomain: "database-4d830.firebaseapp.com",
@@ -46,17 +70,57 @@
     // Firebase 초기화
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
-    const db = getDatabase(app); // 데이터베이스 객체 가져오기
+    const db = getDatabase(app);
 
     // HTML 엘리먼트 연결
     const couponInput = document.getElementById('couponInput');
     const useBtn = document.getElementById('useBtn');
     const messageDiv = document.getElementById('message');
+    const couponListBody = document.getElementById('couponListBody');
+
+    // 'wins' 노드를 실시간 감시하여 목록 출력
+    const winsRef = ref(db, 'wins');
+    
+    onValue(winsRef, (snapshot) => {
+        couponListBody.innerHTML = ""; // 기존 목록 초기화
+
+        if (!snapshot.exists()) {
+            couponListBody.innerHTML = `<tr><td colspan="3" style="text-align: center;">저장된 쿠폰이 없습니다.</td></tr>`;
+            return;
+        }
+
+        const allCoupons = snapshot.val();
+
+        // 사진에 나온 구조에 맞게 데이터 파싱 (key가 고유 ID가 됨)
+        for (const codeId in allCoupons) {
+            const couponData = allCoupons[codeId];
+            const tr = document.createElement('tr');
+
+            // 사진의 데이터 구조에 맞춰 'name'을 가져옴
+            const couponName = couponData.name || "이름 없는 쿠폰";
+            
+            // 데이터베이스에 used 필드가 없으면 기본적으로 '사용 가능(false)'으로 처리
+            const isUsed = couponData.used === true;
+            const statusText = isUsed ? "사용 완료" : "사용 가능";
+            const statusClass = isUsed ? "status-used" : "status-unused";
+
+            tr.innerHTML = `
+                <td><span class="coupon-code">${codeId}</span></td>
+                <td>${couponName}</td>
+                <td class="${statusClass}">${statusText}</td>
+            `;
+            couponListBody.appendChild(tr);
+        }
+    }, (error) => {
+        console.error("데이터 불러오기 실패:", error);
+        couponListBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: red;">목록을 불러오지 못했습니다. 규칙(Rules)을 확인하세요.</td></tr>`;
+    });
+
 
     // 쿠폰 사용 버튼 클릭 이벤트
     useBtn.addEventListener('click', async () => {
-        const couponCode = couponInput.value.trim();
-        messageDiv.innerText = ""; // 메시지 초기화
+        const couponCode = couponInput.value.trim(); // 사용자가 입력한 고유 ID (-OvY...)
+        messageDiv.innerText = "";
 
         if (!couponCode) {
             showMessage("쿠폰 코드를 입력해주세요.", "error");
@@ -64,32 +128,31 @@
         }
 
         try {
-            // 파이어베이스 데이터베이스의 'coupons/입력한코드' 경로를 가리킴
-            const couponRef = ref(db, `coupons/${couponCode}`);
+            // 입력한 고유 ID 경로 조회
+            const couponRef = ref(db, `wins/${couponCode}`);
             const snapshot = await get(couponRef);
 
-            // 1. 쿠폰 존재 여부 확인
             if (!snapshot.exists()) {
-                showMessage("존재하지 않는 쿠폰 번호입니다.", "error");
+                showMessage("존재하지 않는 쿠폰 번호입니다. 코드를 다시 확인해주세요.", "error");
                 return;
             }
 
             const couponData = snapshot.val();
 
-            // 2. 이미 사용된 쿠폰인지 확인
+            // 이미 사용했는지 체크
             if (couponData.used === true) {
-                showMessage("이미 사용된 쿠폰입니다.", "error");
+                showMessage("이미 사용 처리된 쿠폰입니다.", "error");
                 return;
             }
 
-            // 3. 쿠폰 사용 처리 (used 상태를 true로 업데이트)
+            // [핵심] 해당 쿠폰 데이터 안에 used: true 필드를 새로 추가/업데이트 함
             await update(couponRef, {
                 used: true,
-                usedAt: new Date().toISOString() // 사용한 시간 기록
+                usedAt: new Date().toISOString()
             });
 
-            showMessage(`🎉 쿠폰이 성공적으로 적용되었습니다! (${couponData.reward || '보상'})`, "success");
-            couponInput.value = ""; // 입력창 비우기
+            showMessage(`🎉 [${couponData.name}] 쿠폰이 성공적으로 사용되었습니다!`, "success");
+            couponInput.value = ""; // 입력창 초기화
 
         } catch (error) {
             console.error(error);
@@ -97,7 +160,6 @@
         }
     });
 
-    // 메시지 출력 함수
     function showMessage(text, type) {
         messageDiv.innerText = text;
         messageDiv.className = type;
