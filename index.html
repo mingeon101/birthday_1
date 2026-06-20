@@ -3,59 +3,196 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>쿠폰 관리 및 사용 사이트</title>
+    <title>프리미엄 쿠폰 센터</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; }
-        .container { border: 1px solid #ccc; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); background-color: #fff; margin-bottom: 20px; }
-        input { width: 100%; padding: 10px; box-sizing: border-box; margin-bottom: 10px; }
-        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-        button:hover { background-color: #0056b3; }
-        #message { margin-top: 15px; font-weight: bold; text-align: center; }
-        .success { color: green; }
-        .error { color: red; }
+        /* 기본 스타일 초기화 및 배경 설정 */
+        :root {
+            --primary-color: #4a90e2; /* 세련된 블루 */
+            --accent-color: #f5a623; /* 따뜻한 오렌지 */
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-dark: #333333;
+            --text-gray: #777777;
+            --success-color: #2ecc71;
+        }
 
-        /* 쿠폰 목록 테이블 스타일 */
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; word-break: break-all; }
-        th { background-color: #f2f2f2; }
-        .status-unused { color: green; font-weight: bold; }
-        .status-used { color: #aaa; text-decoration: line-through; }
-        .coupon-code { font-family: monospace; background: #eee; padding: 2px 5px; border-radius: 3px; }
+        body { 
+            font-family: 'Noto Sans KR', sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background-color: var(--bg-color); 
+            color: var(--text-dark);
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        /* 메인 컨테이너 */
+        .main-wrapper {
+            width: 100%;
+            max-width: 800px;
+            padding: 40px 20px;
+            box-sizing: border-box;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            color: var(--primary-color);
+            font-weight: 700;
+        }
+
+        header p {
+            margin: 10px 0 0;
+            color: var(--text-gray);
+            font-size: 1.1rem;
+        }
+
+        /* 쿠폰 그리드 레이아웃 */
+        #couponGrid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        /* 개별 쿠폰 카드 디자인 */
+        .coupon-card {
+            background-color: var(--card-bg);
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+            padding: 25px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .coupon-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+        }
+
+        /* 쿠폰 왼쪽 색상 바 decor */
+        .coupon-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 6px;
+            background-color: var(--accent-color);
+        }
+
+        .coupon-name {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            line-height: 1.4;
+            word-break: keep-all;
+        }
+
+        .coupon-expiry {
+            font-size: 0.9rem;
+            color: var(--text-gray);
+            margin-bottom: 20px;
+        }
+
+        /* 버튼 디자인 */
+        .use-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+
+        .use-btn:hover {
+            background-color: #357abd;
+        }
+
+        /* 사용 완료된 쿠폰 스타일 */
+        .coupon-card.used {
+            opacity: 0.6;
+            filter: grayscale(80%);
+        }
+
+        .coupon-card.used::before {
+            background-color: #bdc3c7; /* 회색 바 */
+        }
+
+        .coupon-card.used .use-btn {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        /* 로딩/에러 메시지 */
+        .status-msg {
+            text-align: center;
+            grid-column: 1 / -1;
+            padding: 50px;
+            color: var(--text-gray);
+            font-size: 1.2rem;
+        }
+
+        /* 알림 팝업 (Toast) */
+        #toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            font-size: 1rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+            z-index: 1000;
+        }
+
+        #toast.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* 웹폰트 (Noto Sans KR) */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>🎁 쿠폰 사용하기</h2>
-    <input type="text" id="couponInput" placeholder="쿠폰 코드(고유 ID)를 입력하세요">
-    <button id="useBtn">쿠폰 사용하기</button>
-    <div id="message"></div>
+<div class="main-wrapper">
+    <header>
+        <h1>My Coupon Center</h1>
+        <p>보유하신 쿠폰을 확인하고 바로 사용해보세요.</p>
+    </header>
+
+    <div id="couponGrid">
+        <div class="status-msg">쿠폰 목록을 불러오는 중입니다...</div>
+    </div>
 </div>
 
-<div class="container">
-    <h2>📋 보유 중인 모든 쿠폰 목록</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>쿠폰 코드 (ID)</th>
-                <th>쿠폰 이름 (상품)</th>
-                <th>상태</th>
-            </tr>
-        </thead>
-        <tbody id="couponListBody">
-            <tr>
-                <td colspan="3" style="text-align: center; color: #888;">쿠폰 목록을 불러오는 중입니다...</td>
-            </tr>
-        </tbody>
-    </table>
-</div>
+<div id="toast">메시지가 여기에 표시됩니다.</div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
-    import { getDatabase, ref, get, update, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { getDatabase, ref, update, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // 파이어베이스 설정값
+    // 파이어베이스 설정값 (기존값 유지)
     const firebaseConfig = {
         apiKey: "AIzaSyCd7LUP_IDnbdLgIxyj6iGEFtwXbzwubjc",
         authDomain: "database-4d830.firebaseapp.com",
@@ -63,108 +200,93 @@
         projectId: "database-4d830",
         storageBucket: "database-4d830.firebasestorage.app",
         messagingSenderId: "1011786036842",
-        appId: "1:1011786036842:web:f645d6af597e0c22b4bc13",
-        measurementId: "G-T5S9KKZ2G8"
+        appId: "1:1011786036842:web:f645d6af597e0c22b4bc13"
     };
 
     // Firebase 초기화
     const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
     const db = getDatabase(app);
 
-    // HTML 엘리먼트 연결
-    const couponInput = document.getElementById('couponInput');
-    const useBtn = document.getElementById('useBtn');
-    const messageDiv = document.getElementById('message');
-    const couponListBody = document.getElementById('couponListBody');
+    const couponGrid = document.getElementById('couponGrid');
+    const toast = document.getElementById('toast');
 
-    // 'wins' 노드를 실시간 감시하여 목록 출력
-    const winsRef = ref(db, 'wins');
-    
-    onValue(winsRef, (snapshot) => {
-        couponListBody.innerHTML = ""; // 기존 목록 초기화
-
-        if (!snapshot.exists()) {
-            couponListBody.innerHTML = `<tr><td colspan="3" style="text-align: center;">저장된 쿠폰이 없습니다.</td></tr>`;
-            return;
-        }
-
-        const allCoupons = snapshot.val();
-
-        // 사진에 나온 구조에 맞게 데이터 파싱 (key가 고유 ID가 됨)
-        for (const codeId in allCoupons) {
-            const couponData = allCoupons[codeId];
-            const tr = document.createElement('tr');
-
-            // 사진의 데이터 구조에 맞춰 'name'을 가져옴
-            const couponName = couponData.name || "이름 없는 쿠폰";
-            
-            // 데이터베이스에 used 필드가 없으면 기본적으로 '사용 가능(false)'으로 처리
-            const isUsed = couponData.used === true;
-            const statusText = isUsed ? "사용 완료" : "사용 가능";
-            const statusClass = isUsed ? "status-used" : "status-unused";
-
-            tr.innerHTML = `
-                <td><span class="coupon-code">${codeId}</span></td>
-                <td>${couponName}</td>
-                <td class="${statusClass}">${statusText}</td>
-            `;
-            couponListBody.appendChild(tr);
-        }
-    }, (error) => {
-        console.error("데이터 불러오기 실패:", error);
-        couponListBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: red;">목록을 불러오지 못했습니다. 규칙(Rules)을 확인하세요.</td></tr>`;
-    });
-
-
-    // 쿠폰 사용 버튼 클릭 이벤트
-    useBtn.addEventListener('click', async () => {
-        const couponCode = couponInput.value.trim(); // 사용자가 입력한 고유 ID (-OvY...)
-        messageDiv.innerText = "";
-
-        if (!couponCode) {
-            showMessage("쿠폰 코드를 입력해주세요.", "error");
-            return;
-        }
+    // [핵심] 쿠폰 사용 함수 (전역 함수로 선언하여 버튼에서 호출 가능하게 함)
+    window.useCoupon = async function(couponId, couponName) {
+        if (!confirm(`[${couponName}]\n이 쿠폰을 지금 사용하시겠습니까?`)) return;
 
         try {
-            // 입력한 고유 ID 경로 조회
-            const couponRef = ref(db, `wins/${couponCode}`);
-            const snapshot = await get(couponRef);
-
-            if (!snapshot.exists()) {
-                showMessage("존재하지 않는 쿠폰 번호입니다. 코드를 다시 확인해주세요.", "error");
-                return;
-            }
-
-            const couponData = snapshot.val();
-
-            // 이미 사용했는지 체크
-            if (couponData.used === true) {
-                showMessage("이미 사용 처리된 쿠폰입니다.", "error");
-                return;
-            }
-
-            // [핵심] 해당 쿠폰 데이터 안에 used: true 필드를 새로 추가/업데이트 함
+            const couponRef = ref(db, `wins/${couponId}`);
+            
+            // 데이터베이스 업데이트 (used: true)
             await update(couponRef, {
                 used: true,
                 usedAt: new Date().toISOString()
             });
 
-            showMessage(`🎉 [${couponData.name}] 쿠폰이 성공적으로 사용되었습니다!`, "success");
-            couponInput.value = ""; // 입력창 초기화
+            showToast(`🎉 쿠폰 사용 완료! 축하합니다.`);
 
         } catch (error) {
             console.error(error);
-            showMessage("서버 통신 중 오류가 발생했습니다.", "error");
+            showToast("⚠️ 오류가 발생했습니다. 다시 시도해주세요.");
         }
+    }
+
+    // 데이터베이스 실시간 동기화 (onValue)
+    const winsRef = ref(db, 'wins');
+    
+    onValue(winsRef, (snapshot) => {
+        couponGrid.innerHTML = ""; // 기존 목록 초기화
+
+        if (!snapshot.exists()) {
+            couponGrid.innerHTML = `<div class="status-msg">보유하신 쿠폰이 없습니다.</div>`;
+            return;
+        }
+
+        const allCoupons = snapshot.val();
+
+        // 오브젝트를 돌면서 카드 형태의 HTML 생성
+        for (const codeId in allCoupons) {
+            const couponData = allCoupons[codeId];
+            const isUsed = couponData.used === true;
+            
+            // 사진 구조 반영: 'name' 필드 사용
+            const couponName = couponData.name || "이름 없는 쿠폰";
+
+            // 타임스탬프를 보기 좋은 날짜 형식으로 변환 (예시)
+            let expiryText = "유효기간 정보 없음";
+            if(couponData.timestamp) {
+                const date = new Date(couponData.timestamp);
+                expiryText = `발급일: ${date.toLocaleDateString()}`;
+            }
+
+            // 카드 HTML 구성
+            const cardHtml = `
+                <div class="coupon-card ${isUsed ? 'used' : ''}">
+                    <div>
+                        <div class="coupon-name">${couponName}</div>
+                        <div class="coupon-expiry">${expiryText}</div>
+                    </div>
+                    ${isUsed 
+                        ? `<button class="use-btn" disabled>사용 완료</button>`
+                        : `<button class="use-btn" onclick="useCoupon('${codeId}', '${couponName}')">지금 사용하기</button>`
+                    }
+                </div>
+            `;
+            couponGrid.innerHTML += cardHtml;
+        }
+    }, (error) => {
+        console.error("데이터 불러오기 실패:", error);
+        couponGrid.innerHTML = `<div class="status-msg" style="color: red;">데이터를 불러오지 못했습니다.</div>`;
     });
 
-    function showMessage(text, type) {
-        messageDiv.innerText = text;
-        messageDiv.className = type;
+    // 알림 팝업 함수
+    function showToast(message) {
+        toast.innerText = message;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000); // 3초 뒤 사라짐
     }
 </script>
 
 </body>
 </html>
+
